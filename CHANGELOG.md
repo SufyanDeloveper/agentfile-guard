@@ -4,7 +4,7 @@
 
 Security audit and hardening release.
 
-- **AFG001**: added context-aware AWS Secret Access Key detection (env/JSON/assignment forms), improved secret masking, and fixed boundary matching for base64-like secrets.
+- **AFG001**: added context-aware AWS Secret Access Key detection (env/JSON/assignment forms), expanded high-signal token coverage (GitHub ghp/gho/ghu/ghs/ghr, GitLab, Slack, Stripe, SendGrid, npm, PyPI, Google, Anthropic), connection-string credential detection, generic secret-assignment detection, and improved masking/boundary handling.
 - **AFG002**: expanded hidden/bidi Unicode detection to include LRM/RLM/ALM and deprecated bidi formatting controls (U+206A-U+206F), in addition to existing Trojan Source controls.
 - **AFG003**: ignore markdown links inside fenced code blocks to reduce false positives in documented examples.
 - **AFG005**: added PowerShell encoded command detection (`-enc`/`-encodedcommand`).

@@ -16,7 +16,7 @@ Agent instruction files are executable influence. They tell coding agents what t
 
 | ID | Severity | What it detects |
 |---|---:|---|
-| `AFG001` | error | Embedded secrets: AWS access keys, AWS secret access keys (context-aware), GitHub/Slack/Google tokens, private key blocks, API key-like tokens. Secret values are masked in snippets. |
+| `AFG001` | error | Embedded secrets: AWS keys/secret keys, GitHub/GitLab/Slack/Stripe/SendGrid/npm/PyPI/Google/Anthropic tokens, private keys, DB/HTTP(S) URL credentials, hardcoded Bearer tokens, and suspicious generic `api_key/password/token/secret` assignments. Secret values are masked in snippets. |
 | `AFG002` | error | Hidden/bidi Unicode controls used for obfuscation (Trojan Source class, LRM/RLM/ALM, tag chars, deprecated bidi formatting). UTF-8 BOM at file start is ignored. |
 | `AFG003` | warning | Stale local markdown file references (`[text](path)` / images) that do not exist. Links inside fenced code blocks are ignored. |
 | `AFG005` | error | Dangerous shell patterns: `curl|bash`, `wget|sh`, PowerShell download|`iex`, `Invoke-Expression`, `iex()`, encoded PowerShell `-enc`, `chmod 777`, `rm -rf /`. |
