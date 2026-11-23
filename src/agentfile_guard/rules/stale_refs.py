@@ -24,7 +24,22 @@ class StaleRefsRule:
 
     def check(self, path: Path, text: str, root: Path, config: Config) -> list[Finding]:
         findings: list[Finding] = []
+        in_fence = False
+        fence_marker = ""
         for lineno, line in enumerate(text.splitlines(), start=1):
+            stripped = line.lstrip()
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                marker = stripped[:3]
+                if not in_fence:
+                    in_fence = True
+                    fence_marker = marker
+                elif marker == fence_marker:
+                    in_fence = False
+                    fence_marker = ""
+                continue
+            if in_fence:
+                continue
+
             for match in MD_LINK_RE.finditer(line):
                 raw_target = match.group(1).strip()
                 target = _normalize_target(raw_target)

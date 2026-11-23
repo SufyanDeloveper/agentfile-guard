@@ -12,7 +12,7 @@ python -m pip install ruff
 ```bash
 python -m pytest -q
 ruff check src tests
-agentfile-guard --root . --format text
+agentfile-guard --root . --format text --no-update-check
 ```
 
 ## Guidelines

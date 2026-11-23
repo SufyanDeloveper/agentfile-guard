@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 from . import __version__
 from .config import Config
@@ -47,14 +49,102 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable a rule ID (can be repeated).",
     )
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
+    parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        help="Skip PyPI update check and auto-update before scan.",
+    )
     parser.add_argument("--list-rules", action="store_true", help="List available rules and exit.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
 
+PYPI_URL = "https://pypi.org/pypi/agentfile-guard/json"
+UPDATE_ENV_SKIP = "AGENTFILE_GUARD_SKIP_UPDATE"
+UPDATE_ENV_DISABLE = "AGENTFILE_GUARD_NO_UPDATE"
+
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    parts = []
+    for chunk in v.strip().split("."):
+        num = ""
+        for ch in chunk:
+            if ch.isdigit():
+                num += ch
+            else:
+                break
+        if num:
+            parts.append(int(num))
+        else:
+            parts.append(0)
+    return tuple(parts or [0])
+
+
+def _get_latest_version(timeout: float = 2.5) -> str | None:
+    req = Request(PYPI_URL, headers={"User-Agent": f"agentfile-guard/{__version__}"})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+        version = payload.get("info", {}).get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    except Exception:
+        return None
+    return None
+
+
+def _auto_update_if_needed(args: argparse.Namespace, argv: list[str] | None) -> int | None:
+    if getattr(args, "no_update_check", False):
+        return None
+    if os.environ.get(UPDATE_ENV_DISABLE) == "1":
+        return None
+    if os.environ.get(UPDATE_ENV_SKIP) == "1":
+        return None
+    # Avoid noisy behavior in non-interactive output formats? User asked for it; keep it on.
+    latest = _get_latest_version()
+    if not latest:
+        return None
+    if _parse_version(latest) <= _parse_version(__version__):
+        return None
+
+    print(
+        f"agentfile-guard: update available {__version__} -> {latest}. Updating...",
+        file=sys.stderr,
+    )
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "agentfile-guard"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except Exception as exc:
+        print(f"agentfile-guard: auto-update failed ({exc}); continuing scan.", file=sys.stderr)
+        return None
+
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "").strip()
+        tail = msg.splitlines()[-1] if msg else "unknown error"
+        print(f"agentfile-guard: auto-update failed ({tail}); continuing scan.", file=sys.stderr)
+        return None
+
+    print(f"agentfile-guard: updated to {latest}. Restarting scan...", file=sys.stderr)
+    env = os.environ.copy()
+    env[UPDATE_ENV_SKIP] = "1"
+    # Re-exec using the same interpreter and module.
+    argv_list = list(argv) if argv is not None else sys.argv[1:]
+    new_args = [sys.executable, "-m", "agentfile_guard", *argv_list]
+    try:
+        proc2 = subprocess.run(new_args, env=env)
+        return proc2.returncode
+    except Exception as exc:
+        print(f"agentfile-guard: restart after update failed ({exc}).", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    update_rc = _auto_update_if_needed(args, argv)
+    if update_rc is not None:
+        return update_rc
 
     if args.list_rules:
         out = format_rules()
@@ -183,8 +273,7 @@ def render_text(result: ScanResult, use_color: bool = False) -> str:
     total = _c(str(len(result.findings)), BOLD, use_color=use_color)
     lines.append(_c(hr, GRAY, use_color=use_color))
     lines.append(
-        f"Files scanned: {files}  Findings: {total}  "
-        f"Errors: {err}  Warnings: {warn}  Info: {info}"
+        f"Files scanned: {files}  Findings: {total}  Errors: {err}  Warnings: {warn}  Info: {info}"
     )
     if result.errors:
         status = _c("FAIL", RED, BOLD, use_color=use_color)
@@ -194,6 +283,8 @@ def render_text(result: ScanResult, use_color: bool = False) -> str:
         status = _c("PASS", GREEN, BOLD, use_color=use_color)
     lines.append(f"Status: {status}")
     return "\n".join(lines).rstrip() + "\n\n\n"
+
+
 def render_github(result: ScanResult) -> str:
     # GitHub Actions workflow commands.
     # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions

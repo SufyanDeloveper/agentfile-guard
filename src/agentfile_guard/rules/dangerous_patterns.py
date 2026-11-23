@@ -33,27 +33,57 @@ DANGEROUS_SHELL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (re.compile(r"\bInvoke-Expression\b", re.IGNORECASE), "Invoke-Expression usage"),
     (re.compile(r"\b(?:iex)\s*\(", re.IGNORECASE), "PowerShell iex() usage"),
+    (
+        re.compile(
+            r"\bpowershell(?:\.exe)?\b[^\n]{0,120}\s-(?:enc|encodedcommand)\b", re.IGNORECASE
+        ),
+        "PowerShell encoded command",
+    ),
     (re.compile(r"\bchmod\s+777\b"), "chmod 777"),
     (re.compile(r"\brm\s+-rf\s+/(?:\s|$)"), "rm -rf /"),
 ]
 
 PROMPT_INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
-        re.compile(r"\bignore\s+(?:all\s+)?previous\s+instructions\b", re.IGNORECASE),
-        "ignore previous instructions",
+        re.compile(
+            r"\b(?:ignore|disregard|forget|override)\s+"
+            r"(?:all\s+|any\s+|the\s+|your\s+|my\s+)?"
+            r"(?:previous|prior|above|earlier|preceding|system|developer|initial)\s+"
+            r"(?:instructions?|rules?|directives?|prompts?|messages?|guidelines?)\b",
+            re.IGNORECASE,
+        ),
+        "instruction override phrase",
     ),
     (
-        re.compile(r"\bdisregard\s+(?:all\s+)?previous\s+instructions\b", re.IGNORECASE),
-        "disregard previous instructions",
+        re.compile(
+            r"\b(?:reveal|show|print|expose|output|leak|display|repeat)\s+"
+            r"(?:the\s+|your\s+|all\s+|any\s+|hidden\s+|secret\s+|internal\s+|original\s+)?"
+            r"(?:system|developer|hidden|initial|internal|original)\s+"
+            r"(?:prompt|instructions?|messages?|rules?)\b",
+            re.IGNORECASE,
+        ),
+        "system prompt extraction phrase",
     ),
     (
-        re.compile(r"\bforget\s+(?:all\s+)?previous\s+instructions\b", re.IGNORECASE),
-        "forget previous instructions",
-    ),
-    (re.compile(r"\breveal\s+(?:the\s+)?system\s+prompt\b", re.IGNORECASE), "reveal system prompt"),
-    (
-        re.compile(r"\byou\s+are\s+now\s+(?:DAN|developer\s+mode)\b", re.IGNORECASE),
+        re.compile(
+            r"\byou\s+are\s+now\s+"
+            r"(?:DAN|developer\s+mode|unrestricted|jailbroken|in\s+developer\s+mode)\b",
+            re.IGNORECASE,
+        ),
         "role override / jailbreak marker",
+    ),
+    (
+        re.compile(r"\b(?:do\s+anything\s+now|jailbreak(?:\s+mode)?)\b", re.IGNORECASE),
+        "jailbreak marker",
+    ),
+    (
+        re.compile(
+            r"\b(?:bypass|disable|circumvent|ignore)\s+"
+            r"(?:all\s+|any\s+|the\s+)?"
+            r"(?:safety|security|guardrails?|filters?|restrictions?|policies?)\b",
+            re.IGNORECASE,
+        ),
+        "safety bypass instruction",
     ),
     (
         re.compile(
@@ -61,6 +91,13 @@ PROMPT_INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
             re.IGNORECASE,
         ),
         "safety override instruction",
+    ),
+    (
+        re.compile(
+            r"\b(?:new|updated|replacement)\s+(?:system\s+)?instructions?\s*:",
+            re.IGNORECASE,
+        ),
+        "instruction replacement marker",
     ),
 ]
 
@@ -87,12 +124,11 @@ class DangerousPatternsRule:
     def _scan_patterns(
         path: Path, lineno: int, line: str, rule: Rule, patterns: list[tuple[re.Pattern[str], str]]
     ) -> list[Finding]:
-        out: list[Finding] = []
         for pattern, label in patterns:
             m = pattern.search(line)
             if not m:
                 continue
-            out.append(
+            return [
                 Finding(
                     rule=rule,
                     path=path,
@@ -106,5 +142,5 @@ class DangerousPatternsRule:
                     ),
                     snippet=line.rstrip("\n\r")[:240],
                 )
-            )
-        return out
+            ]
+        return []
